@@ -66,6 +66,7 @@ Persistent connection for instant event notifications.
 | [api-integration.md](./api-integration.md) | API endpoints and usage |
 | [action-items.md](./action-items.md) | Implementation checklist |
 | [use-cases.md](./use-cases.md) | Example scenarios |
+| [webhook-setup.md](./webhook-setup.md) | **Phase 2: Webhook integration guide** |
 
 ## Quick Start
 

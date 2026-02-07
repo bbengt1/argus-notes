@@ -1,10 +1,10 @@
 # Action Items
 
-## Phase 1: MVP (Polling + Skill)
+## Phase 1: MVP (Polling + Skill) ✅ COMPLETE
 
 ### 1.1 Store API Credentials
-- [ ] Add ArgusAI API key to OpenClaw credentials
-- [ ] Update TOOLS.md with ArgusAI connection info
+- [x] Add ArgusAI API key to OpenClaw credentials
+- [x] Update TOOLS.md with ArgusAI connection info
 
 **Details:**
 ```bash
@@ -15,10 +15,10 @@ ArgusAI:
 ```
 
 ### 1.2 Create ArgusAI Skill
-- [ ] Create skill directory structure
-- [ ] Write SKILL.md with query patterns
-- [ ] Implement API wrapper functions
-- [ ] Test natural language queries
+- [x] Create skill directory structure
+- [x] Write SKILL.md with query patterns
+- [x] Implement API wrapper functions
+- [x] Test natural language queries
 
 **File:** `skills/argusai/SKILL.md`
 
@@ -86,21 +86,24 @@ curl -sk -H "X-API-Key: $ARGUSAI_KEY" \
 ```
 
 ### 1.4 Test Queries
-- [ ] "What happened at the front door today?"
-- [ ] "Any packages delivered?"
-- [ ] "Show me the last security event"
-- [ ] "Is everything okay at home?"
+- [x] "What happened at the front door today?"
+- [x] "Any packages delivered?"
+- [x] "Show me the last security event"
+- [x] "Is everything okay at home?"
 
 ---
 
-## Phase 2: Webhook Push Notifications
+## Phase 2: Webhook Push Notifications 🔄 IN PROGRESS
+
+> **Full setup guide:** [webhook-setup.md](./webhook-setup.md)
 
 ### 2.1 OpenClaw Webhook Endpoint
-- [ ] Research OpenClaw webhook capabilities
-- [ ] Configure webhook receiver
+- [x] Research OpenClaw webhook capabilities
+- [ ] Enable webhooks in OpenClaw config
+- [ ] Generate secure webhook token
 - [ ] Test with curl
 
-**Question:** Does OpenClaw support incoming webhooks? Check docs.
+**Finding:** OpenClaw supports `/hooks/agent` endpoint for running isolated agent turns with Telegram delivery!
 
 ### 2.2 ArgusAI Alert Rule
 - [ ] Create alert rule in ArgusAI
