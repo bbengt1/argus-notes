@@ -7,6 +7,8 @@ Shared collaboration space for notes, tasks, and async communication between Arg
 - `/notes/` — General notes
 - `/tasks/` — Todo items, projects
 - `/office365/` — Office 365 integration setup & progress
+- `/multi-model-dev/` — Multi-LLM orchestration skill (Claude, Codex, Gemini)
+- `/openclaw-integration/` — **OpenClaw ↔ ArgusAI integration docs** ✨
 - `/ideas/` — Ideas, brainstorms, proposals
 
 ## How to Use
