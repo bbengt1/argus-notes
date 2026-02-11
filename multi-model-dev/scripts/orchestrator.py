@@ -1,0 +1,746 @@
+#!/usr/bin/env python3
+"""
+Multi-Model Development Orchestrator (v2)
+
+Async parallel execution of multiple LLMs with:
+- Model interface abstraction
+- Timeout handling and error recovery
+- Output parsing for each model format
+- Execution modes (simple, medium, complex, architectural)
+
+Usage:
+    from orchestrator import Orchestrator, ExecutionMode
+    
+    async def main():
+        orch = Orchestrator()
+        result = await orch.run("Build a REST API endpoint")
+        print(result.consensus_code)
+    
+    asyncio.run(main())
+"""
+
+import asyncio
+import json
+import re
+import subprocess
+import time
+import os
+from abc import ABC, abstractmethod
+from dataclasses import dataclass, field
+from datetime import datetime
+from enum import Enum
+from typing import Dict, List, Optional, Protocol, Tuple, Any
+from pathlib import Path
+
+
+# =============================================================================
+# EXECUTION MODES
+# =============================================================================
+
+class ExecutionMode(Enum):
+    """Task execution modes based on complexity."""
+    SIMPLE = "simple"           # <50 LOC: 1 model, no validator
+    MEDIUM = "medium"           # 50-500 LOC: 2 primary + 1 validator
+    COMPLEX = "complex"         # >500 LOC: 2 primary + 2 validators
+    ARCHITECTURAL = "arch"      # System-wide: all 4 models
+
+
+# =============================================================================
+# DATA CLASSES
+# =============================================================================
+
+@dataclass
+class ModelOutput:
+    """Output from a single model execution."""
+    model: str
+    code: str
+    explanation: str
+    execution_time: float
+    success: bool
+    error: Optional[str] = None
+    raw_output: str = ""
+    score: float = 0.0
+    metadata: Dict[str, Any] = field(default_factory=dict)
+    
+    @property
+    def code_blocks(self) -> List[str]:
+        """Extract code blocks from output."""
+        pattern = r'```(?:\w+)?\n(.*?)```'
+        return re.findall(pattern, self.raw_output, re.DOTALL)
+    
+    @property
+    def primary_code(self) -> str:
+        """Get the primary code block or full code."""
+        blocks = self.code_blocks
+        return blocks[0].strip() if blocks else self.code
+
+
+@dataclass
+class OrchestratorResult:
+    """Complete result from orchestration."""
+    task: str
+    mode: ExecutionMode
+    category: str
+    consensus_code: str
+    explanation: str
+    outputs: List[ModelOutput]
+    validation: Optional[Dict] = None
+    execution_time: float = 0.0
+    metadata: Dict[str, Any] = field(default_factory=dict)
+    
+    def to_dict(self) -> dict:
+        return {
+            "task": self.task,
+            "mode": self.mode.value,
+            "category": self.category,
+            "consensus_code": self.consensus_code,
+            "explanation": self.explanation,
+            "outputs": [
+                {
+                    "model": o.model,
+                    "success": o.success,
+                    "score": o.score,
+                    "execution_time": o.execution_time,
+                    "code_length": len(o.code),
+                    "error": o.error
+                }
+                for o in self.outputs
+            ],
+            "validation": self.validation,
+            "execution_time": self.execution_time,
+            "metadata": self.metadata
+        }
+
+
+# =============================================================================
+# MODEL INTERFACE
+# =============================================================================
+
+class ModelRunner(Protocol):
+    """Protocol for model runners."""
+    
+    @property
+    def name(self) -> str:
+        """Model name."""
+        ...
+    
+    async def run(self, prompt: str, timeout: float = 60.0) -> ModelOutput:
+        """Run the model with the given prompt."""
+        ...
+
+
+class BaseModelRunner(ABC):
+    """Base class for model runners with common functionality."""
+    
+    def __init__(self, timeout: float = 60.0):
+        self.default_timeout = timeout
+    
+    @property
+    @abstractmethod
+    def name(self) -> str:
+        pass
+    
+    @abstractmethod
+    async def _execute(self, prompt: str) -> Tuple[str, str]:
+        """Execute the model. Returns (code, raw_output)."""
+        pass
+    
+    async def run(self, prompt: str, timeout: Optional[float] = None) -> ModelOutput:
+        """Run with timeout and error handling."""
+        timeout = timeout or self.default_timeout
+        start_time = time.time()
+        
+        try:
+            code, raw_output = await asyncio.wait_for(
+                self._execute(prompt),
+                timeout=timeout
+            )
+            execution_time = time.time() - start_time
+            
+            return ModelOutput(
+                model=self.name,
+                code=code,
+                explanation=f"Generated by {self.name}",
+                execution_time=execution_time,
+                success=True,
+                raw_output=raw_output
+            )
+            
+        except asyncio.TimeoutError:
+            return ModelOutput(
+                model=self.name,
+                code="",
+                explanation="",
+                execution_time=timeout,
+                success=False,
+                error=f"Timeout after {timeout}s"
+            )
+        except Exception as e:
+            return ModelOutput(
+                model=self.name,
+                code="",
+                explanation="",
+                execution_time=time.time() - start_time,
+                success=False,
+                error=str(e)
+            )
+    
+    def _parse_code_blocks(self, text: str) -> str:
+        """Extract code from markdown code blocks."""
+        pattern = r'```(?:\w+)?\n(.*?)```'
+        matches = re.findall(pattern, text, re.DOTALL)
+        return matches[0].strip() if matches else text
+    
+    def _build_prompt(self, task: str) -> str:
+        """Build a standardized prompt for code generation."""
+        return f"""You are an expert software engineer. 
+
+Task: {task}
+
+Requirements:
+1. Write clean, production-ready code
+2. Include proper error handling
+3. Add type hints where applicable
+4. Include brief comments for complex logic
+5. Return code in a markdown code block
+
+Provide your solution:"""
+
+
+# =============================================================================
+# MODEL IMPLEMENTATIONS
+# =============================================================================
+
+class ClaudeCodeRunner(BaseModelRunner):
+    """Runner for Claude Code CLI."""
+    
+    @property
+    def name(self) -> str:
+        return "claude-code"
+    
+    async def _execute(self, prompt: str) -> Tuple[str, str]:
+        proc = await asyncio.create_subprocess_exec(
+            "claude", "-p", self._build_prompt(prompt),
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE
+        )
+        stdout, stderr = await proc.communicate()
+        
+        if proc.returncode != 0:
+            raise RuntimeError(f"claude-code failed: {stderr.decode()}")
+        
+        raw_output = stdout.decode()
+        code = self._parse_code_blocks(raw_output)
+        return code, raw_output
+
+
+class CodexRunner(BaseModelRunner):
+    """Runner for Codex CLI."""
+    
+    @property
+    def name(self) -> str:
+        return "codex"
+    
+    async def _execute(self, prompt: str) -> Tuple[str, str]:
+        proc = await asyncio.create_subprocess_exec(
+            "codex", "-q", self._build_prompt(prompt),
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE
+        )
+        stdout, stderr = await proc.communicate()
+        
+        if proc.returncode != 0:
+            raise RuntimeError(f"codex failed: {stderr.decode()}")
+        
+        raw_output = stdout.decode()
+        code = self._parse_code_blocks(raw_output)
+        return code, raw_output
+
+
+class GeminiRunner(BaseModelRunner):
+    """Runner for Gemini CLI."""
+    
+    @property
+    def name(self) -> str:
+        return "gemini"
+    
+    async def _execute(self, prompt: str) -> Tuple[str, str]:
+        proc = await asyncio.create_subprocess_exec(
+            "gemini", "-p", self._build_prompt(prompt),
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE
+        )
+        stdout, stderr = await proc.communicate()
+        
+        if proc.returncode != 0:
+            raise RuntimeError(f"gemini failed: {stderr.decode()}")
+        
+        raw_output = stdout.decode()
+        code = self._parse_code_blocks(raw_output)
+        return code, raw_output
+
+
+class GrokRunner(BaseModelRunner):
+    """Runner for Grok API."""
+    
+    def __init__(self, api_key: Optional[str] = None, timeout: float = 60.0):
+        super().__init__(timeout)
+        self.api_key = api_key or os.getenv("GROK_API_KEY")
+    
+    @property
+    def name(self) -> str:
+        return "grok"
+    
+    async def _execute(self, prompt: str) -> Tuple[str, str]:
+        if not self.api_key:
+            raise RuntimeError("GROK_API_KEY not set")
+        
+        try:
+            from grok_client import GrokClient
+            client = GrokClient(api_key=self.api_key)
+            response = client.code_task(prompt)
+            code = response.first_code_block or response.content
+            return code, response.content
+        except ImportError:
+            # Fallback to direct API call
+            import aiohttp
+            
+            async with aiohttp.ClientSession() as session:
+                async with session.post(
+                    "https://api.x.ai/v1/chat/completions",
+                    headers={
+                        "Authorization": f"Bearer {self.api_key}",
+                        "Content-Type": "application/json"
+                    },
+                    json={
+                        "model": "grok-3",
+                        "messages": [{"role": "user", "content": self._build_prompt(prompt)}],
+                        "temperature": 0.3,
+                        "max_tokens": 4096
+                    }
+                ) as resp:
+                    if resp.status != 200:
+                        raise RuntimeError(f"Grok API error: {resp.status}")
+                    data = await resp.json()
+                    content = data["choices"][0]["message"]["content"]
+                    code = self._parse_code_blocks(content)
+                    return code, content
+
+
+# =============================================================================
+# TASK ANALYSIS
+# =============================================================================
+
+# Category keywords
+CATEGORY_KEYWORDS = {
+    "frontend": ["react", "component", "frontend", "ui", "button", "form", "dashboard", "vue", "css", "html"],
+    "backend": ["api", "endpoint", "service", "backend", "middleware", "database", "server", "rest", "graphql"],
+    "devops": ["docker", "kubernetes", "ci/cd", "pipeline", "terraform", "deploy", "ansible", "helm"],
+    "scripts": ["script", "automation", "bash", "cli", "tool", "cron", "workflow"],
+    "data": ["data", "pipeline", "etl", "analytics", "sql", "pandas", "spark"],
+    "architecture": ["architecture", "design", "system", "scale", "pattern", "microservice"]
+}
+
+# Model routing by category
+CATEGORY_ROUTING = {
+    "frontend": (["gemini", "claude-code"], "codex"),
+    "backend": (["claude-code", "codex"], "gemini"),
+    "devops": (["codex", "grok"], "claude-code"),
+    "scripts": (["codex", "gemini"], "claude-code"),
+    "data": (["codex", "claude-code"], "gemini"),
+    "architecture": (["grok", "claude-code"], "codex"),
+    "generic": (["claude-code", "codex"], "gemini")
+}
+
+
+def analyze_task(task: str) -> Tuple[str, ExecutionMode]:
+    """
+    Analyze task to determine category and execution mode.
+    
+    Returns: (category, execution_mode)
+    """
+    task_lower = task.lower()
+    
+    # Detect category
+    category = "generic"
+    max_matches = 0
+    for cat, keywords in CATEGORY_KEYWORDS.items():
+        matches = sum(1 for kw in keywords if kw in task_lower)
+        if matches > max_matches:
+            max_matches = matches
+            category = cat
+    
+    # Estimate complexity based on task description
+    complexity_indicators = {
+        "simple": ["simple", "basic", "quick", "small", "function", "helper"],
+        "complex": ["complex", "full", "complete", "system", "integration", "multi"],
+        "architecture": ["architecture", "design", "scale", "enterprise", "platform"]
+    }
+    
+    mode = ExecutionMode.MEDIUM  # Default
+    for mode_name, indicators in complexity_indicators.items():
+        if any(ind in task_lower for ind in indicators):
+            if mode_name == "simple":
+                mode = ExecutionMode.SIMPLE
+            elif mode_name == "complex":
+                mode = ExecutionMode.COMPLEX
+            elif mode_name == "architecture":
+                mode = ExecutionMode.ARCHITECTURAL
+            break
+    
+    return category, mode
+
+
+def get_routing(category: str, mode: ExecutionMode) -> Tuple[List[str], List[str]]:
+    """
+    Get model routing based on category and mode.
+    
+    Returns: (primary_models, validators)
+    """
+    primaries, default_validator = CATEGORY_ROUTING.get(category, CATEGORY_ROUTING["generic"])
+    
+    if mode == ExecutionMode.SIMPLE:
+        return [primaries[0]], []
+    elif mode == ExecutionMode.MEDIUM:
+        return primaries[:2], [default_validator]
+    elif mode == ExecutionMode.COMPLEX:
+        # Add second validator from remaining models
+        all_models = ["claude-code", "codex", "gemini", "grok"]
+        second_validator = next(
+            (m for m in all_models if m not in primaries and m != default_validator),
+            None
+        )
+        validators = [default_validator]
+        if second_validator:
+            validators.append(second_validator)
+        return primaries[:2], validators
+    else:  # ARCHITECTURAL
+        return ["claude-code", "codex", "gemini", "grok"], []
+
+
+# =============================================================================
+# SCORING
+# =============================================================================
+
+def score_output(output: ModelOutput, task: str) -> float:
+    """Score a model output (0-100)."""
+    if not output.success:
+        return 0.0
+    
+    score = 50.0  # Base score
+    code = output.code
+    
+    # Code presence
+    if code and len(code) > 50:
+        score += 10
+    
+    # Structure indicators
+    if "def " in code or "class " in code or "function " in code:
+        score += 10
+    if "import " in code or "from " in code or "require" in code:
+        score += 5
+    
+    # Documentation
+    if '"""' in code or "'''" in code or "/**" in code:
+        score += 10
+    if "#" in code or "//" in code:
+        score += 5
+    
+    # Error handling
+    if "try" in code or "catch" in code or "except" in code:
+        score += 5
+    
+    # Type hints (Python/TypeScript)
+    if ": " in code and "->" in code:
+        score += 5
+    if ": string" in code or ": number" in code or ": boolean" in code:
+        score += 5
+    
+    return min(score, 100.0)
+
+
+# =============================================================================
+# MERGING
+# =============================================================================
+
+def merge_outputs(outputs: List[ModelOutput], task: str) -> Tuple[str, str]:
+    """
+    Merge multiple outputs into consensus code.
+    
+    Returns: (consensus_code, explanation)
+    """
+    successful = [o for o in outputs if o.success and o.code]
+    
+    if not successful:
+        return "", "No successful outputs to merge"
+    
+    if len(successful) == 1:
+        return successful[0].code, f"Single output from {successful[0].model}"
+    
+    # Score and rank outputs
+    scored = [(o, o.score) for o in successful]
+    scored.sort(key=lambda x: x[1], reverse=True)
+    
+    # Use highest scored as base
+    best = scored[0][0]
+    
+    # Build explanation
+    explanation_parts = [
+        f"Primary: {best.model} (score: {best.score:.0f})",
+        f"Alternatives: {', '.join(o.model for o, _ in scored[1:])}"
+    ]
+    
+    # For now, use best output
+    # TODO: Implement AST-based merging (#3)
+    return best.code, " | ".join(explanation_parts)
+
+
+# =============================================================================
+# ORCHESTRATOR
+# =============================================================================
+
+class Orchestrator:
+    """
+    Multi-model orchestrator with async parallel execution.
+    """
+    
+    def __init__(
+        self,
+        grok_api_key: Optional[str] = None,
+        default_timeout: float = 60.0,
+        max_retries: int = 1
+    ):
+        self.default_timeout = default_timeout
+        self.max_retries = max_retries
+        
+        # Initialize model runners
+        self.runners: Dict[str, BaseModelRunner] = {
+            "claude-code": ClaudeCodeRunner(timeout=default_timeout),
+            "codex": CodexRunner(timeout=default_timeout),
+            "gemini": GeminiRunner(timeout=default_timeout),
+            "grok": GrokRunner(api_key=grok_api_key, timeout=default_timeout),
+        }
+    
+    async def run(
+        self,
+        task: str,
+        mode: Optional[ExecutionMode] = None,
+        models: Optional[List[str]] = None,
+        timeout: Optional[float] = None,
+        verbose: bool = False
+    ) -> OrchestratorResult:
+        """
+        Run the orchestration pipeline.
+        
+        Args:
+            task: Task description
+            mode: Execution mode (auto-detected if None)
+            models: Specific models to use (auto-routed if None)
+            timeout: Per-model timeout
+            verbose: Print progress
+            
+        Returns:
+            OrchestratorResult with consensus code and metadata
+        """
+        start_time = time.time()
+        timeout = timeout or self.default_timeout
+        
+        # Analyze task
+        category, auto_mode = analyze_task(task)
+        mode = mode or auto_mode
+        
+        if verbose:
+            print(f"📋 Task: {task[:60]}...")
+            print(f"📁 Category: {category}")
+            print(f"⚙️  Mode: {mode.value}")
+        
+        # Get routing
+        if models:
+            primaries = models
+            validators = []
+        else:
+            primaries, validators = get_routing(category, mode)
+        
+        all_models = primaries + validators
+        
+        if verbose:
+            print(f"🎯 Models: {', '.join(primaries)}")
+            if validators:
+                print(f"✅ Validators: {', '.join(validators)}")
+            print()
+        
+        # Run models in parallel
+        outputs = await self._run_parallel(all_models, task, timeout, verbose)
+        
+        # Score outputs
+        for output in outputs:
+            output.score = score_output(output, task)
+        
+        # Run validation if we have validators
+        validation = None
+        if validators and len([o for o in outputs if o.success]) >= 2:
+            validation = await self._run_validation(task, outputs, validators[0], verbose)
+        
+        # Merge outputs
+        consensus_code, explanation = merge_outputs(outputs, task)
+        
+        execution_time = time.time() - start_time
+        
+        if verbose:
+            print(f"\n🎯 Consensus: {len(consensus_code)} chars")
+            print(f"⏱️  Total time: {execution_time:.1f}s")
+        
+        return OrchestratorResult(
+            task=task,
+            mode=mode,
+            category=category,
+            consensus_code=consensus_code,
+            explanation=explanation,
+            outputs=outputs,
+            validation=validation,
+            execution_time=execution_time,
+            metadata={
+                "primaries": primaries,
+                "validators": validators,
+                "timestamp": datetime.now().isoformat()
+            }
+        )
+    
+    async def _run_parallel(
+        self,
+        models: List[str],
+        task: str,
+        timeout: float,
+        verbose: bool
+    ) -> List[ModelOutput]:
+        """Run multiple models in parallel."""
+        
+        async def run_with_retry(model: str) -> ModelOutput:
+            runner = self.runners.get(model)
+            if not runner:
+                return ModelOutput(
+                    model=model, code="", explanation="",
+                    execution_time=0, success=False,
+                    error=f"Unknown model: {model}"
+                )
+            
+            for attempt in range(self.max_retries + 1):
+                output = await runner.run(task, timeout)
+                if output.success:
+                    if verbose:
+                        print(f"✅ {model}: {len(output.code)} chars ({output.execution_time:.1f}s)")
+                    return output
+                
+                if attempt < self.max_retries:
+                    if verbose:
+                        print(f"⚠️  {model}: retrying ({output.error})")
+                    await asyncio.sleep(1)
+            
+            if verbose:
+                print(f"❌ {model}: {output.error}")
+            return output
+        
+        # Run all models concurrently
+        tasks = [run_with_retry(model) for model in models]
+        outputs = await asyncio.gather(*tasks)
+        
+        return list(outputs)
+    
+    async def _run_validation(
+        self,
+        task: str,
+        outputs: List[ModelOutput],
+        validator_model: str,
+        verbose: bool
+    ) -> Optional[Dict]:
+        """Run cross-model validation."""
+        try:
+            from validator import Validator
+            
+            if verbose:
+                print(f"\n🔍 Validating with {validator_model}...")
+            
+            outputs_dict = {o.model: o.code for o in outputs if o.success}
+            
+            def model_runner(model: str, prompt: str) -> str:
+                # Sync wrapper for validation
+                import asyncio
+                runner = self.runners.get(model)
+                if runner:
+                    loop = asyncio.new_event_loop()
+                    try:
+                        output = loop.run_until_complete(runner.run(prompt))
+                        return output.raw_output or output.code
+                    finally:
+                        loop.close()
+                raise RuntimeError(f"No runner for {model}")
+            
+            validator = Validator(model_runner=model_runner)
+            result = validator.validate(task, outputs_dict, validator_model)
+            
+            if verbose:
+                status = "⚠️ Review needed" if result.needs_human_review else "✅ Passed"
+                print(f"{status} (confidence: {result.confidence:.0%})")
+            
+            return result.to_dict()
+            
+        except ImportError:
+            if verbose:
+                print("⚠️  Validator not available")
+            return None
+        except Exception as e:
+            if verbose:
+                print(f"⚠️  Validation error: {e}")
+            return None
+    
+    def run_sync(self, task: str, **kwargs) -> OrchestratorResult:
+        """Synchronous wrapper for run()."""
+        return asyncio.run(self.run(task, **kwargs))
+
+
+# =============================================================================
+# CLI
+# =============================================================================
+
+async def main():
+    import argparse
+    
+    parser = argparse.ArgumentParser(description="Multi-Model Orchestrator")
+    parser.add_argument("task", nargs="?", help="Task to execute")
+    parser.add_argument("--mode", "-m", choices=["simple", "medium", "complex", "arch"])
+    parser.add_argument("--models", nargs="+", help="Specific models to use")
+    parser.add_argument("--timeout", "-t", type=float, default=60.0)
+    parser.add_argument("--verbose", "-v", action="store_true")
+    parser.add_argument("--json", "-j", action="store_true", help="Output JSON")
+    
+    args = parser.parse_args()
+    
+    if not args.task:
+        parser.print_help()
+        return
+    
+    mode = ExecutionMode(args.mode) if args.mode else None
+    
+    orch = Orchestrator()
+    result = await orch.run(
+        args.task,
+        mode=mode,
+        models=args.models,
+        timeout=args.timeout,
+        verbose=args.verbose
+    )
+    
+    if args.json:
+        print(json.dumps(result.to_dict(), indent=2))
+    else:
+        print("\n" + "=" * 60)
+        print("CONSENSUS CODE")
+        print("=" * 60)
+        print(result.consensus_code)
+        print("=" * 60)
+        print(f"\nExplanation: {result.explanation}")
+        print(f"Total time: {result.execution_time:.1f}s")
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
