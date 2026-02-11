@@ -98,12 +98,20 @@ class MultiModelOrchestrator:
                     if verbose:
                         print(f"❌ {model_name}: {str(e)}")
         
+        # Cross-model validation (Issue #6)
+        validation_result = None
+        if len(self.outputs) >= 2:
+            validation_result = self._run_cross_validation(task, validator, verbose)
+        
         # Score and merge outputs
         consensus = self._merge_consensus(task)
         
         if verbose:
             print(f"\n🎯 Merged consensus code: {len(consensus['code'])} chars")
             print(f"📊 Quality score: {consensus.get('quality_score', 'N/A')}")
+            if validation_result:
+                print(f"✅ Validation: {validation_result.get('status', 'N/A')} "
+                      f"(confidence: {validation_result.get('confidence', 0):.0%})")
         
         return {
             "category": category,
@@ -114,6 +122,7 @@ class MultiModelOrchestrator:
                 {"model": o.model, "score": o.score, "code_length": len(o.code)}
                 for o in self.outputs
             ],
+            "validation": validation_result,
             "metadata": {
                 "primary_models": primary_models,
                 "validator": validator,
@@ -127,6 +136,56 @@ class MultiModelOrchestrator:
             return self.models[model](task)
         except Exception as e:
             print(f"Error running {model}: {e}")
+            return None
+    
+    def _run_cross_validation(self, task: str, validator_model: str, verbose: bool = False) -> Optional[Dict]:
+        """
+        Run cross-model validation on collected outputs (Issue #6).
+        
+        Args:
+            task: Original task
+            validator_model: Model to use for validation
+            verbose: Print progress
+            
+        Returns:
+            Validation result dict or None if validation unavailable
+        """
+        try:
+            from validator import Validator, ValidationResult
+            
+            if verbose:
+                print(f"\n🔍 Running cross-validation with {validator_model}...")
+            
+            # Prepare outputs for validation
+            outputs_dict = {o.model: o.code for o in self.outputs}
+            
+            # Create validator with model runner
+            def model_runner(model: str, prompt: str) -> str:
+                if model == "grok" and self.grok_api_key:
+                    from grok_client import GrokClient
+                    client = GrokClient(api_key=self.grok_api_key)
+                    return client.chat(prompt).content
+                # Add other model runners as needed
+                raise NotImplementedError(f"No runner for {model}")
+            
+            validator = Validator(model_runner=model_runner)
+            result = validator.validate(task, outputs_dict, validator_model)
+            
+            if verbose:
+                if result.needs_human_review:
+                    print(f"⚠️  Human review recommended: {', '.join(result.review_reasons)}")
+                else:
+                    print(f"✅ Validation passed: {result.summary}")
+            
+            return result.to_dict()
+            
+        except ImportError:
+            if verbose:
+                print("⚠️  Validator module not available, skipping cross-validation")
+            return None
+        except Exception as e:
+            if verbose:
+                print(f"⚠️  Validation error: {e}")
             return None
     
     def _run_claude_code(self, task: str) -> Optional[ModelOutput]:
