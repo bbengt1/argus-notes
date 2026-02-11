@@ -243,7 +243,7 @@ class MultiModelOrchestrator:
             }
             
             payload = {
-                "model": "grok-2",
+                "model": "grok-3",
                 "messages": [
                     {"role": "system", "content": "You are an expert software engineer. Write clean, production-ready code."},
                     {"role": "user", "content": task}

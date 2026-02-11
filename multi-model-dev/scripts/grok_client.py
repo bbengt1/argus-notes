@@ -32,9 +32,12 @@ except ImportError:
 
 class GrokModel(Enum):
     """Available Grok models."""
-    GROK_2 = "grok-2"
-    GROK_2_MINI = "grok-2-mini"  # Faster, cheaper
-    GROK_BETA = "grok-beta"
+    GROK_3 = "grok-3"
+    GROK_3_MINI = "grok-3-mini"  # Faster, cheaper
+    GROK_4 = "grok-4-0709"  # Latest
+    GROK_4_FAST = "grok-4-fast-non-reasoning"  # Fast, no reasoning
+    GROK_CODE = "grok-code-fast-1"  # Optimized for code
+    GROK_VISION = "grok-2-vision-1212"  # Vision capable
 
 
 @dataclass
@@ -119,7 +122,7 @@ class GrokClient:
     def chat(
         self,
         prompt: str,
-        model: GrokModel = GrokModel.GROK_2,
+        model: GrokModel = GrokModel.GROK_3,
         system_prompt: Optional[str] = None,
         temperature: float = 0.7,
         max_tokens: int = 4096,
@@ -157,7 +160,7 @@ class GrokClient:
     def chat_messages(
         self,
         messages: List[Dict[str, str]],
-        model: GrokModel = GrokModel.GROK_2,
+        model: GrokModel = GrokModel.GROK_3,
         temperature: float = 0.7,
         max_tokens: int = 4096,
         **kwargs
@@ -278,7 +281,7 @@ class GrokClient:
         self,
         task: str,
         language: Optional[str] = None,
-        model: GrokModel = GrokModel.GROK_2
+        model: GrokModel = GrokModel.GROK_3
     ) -> GrokResponse:
         """
         Specialized method for code generation tasks.
@@ -315,7 +318,7 @@ if __name__ == "__main__":
     
     parser = argparse.ArgumentParser(description="Grok API CLI")
     parser.add_argument("prompt", nargs="?", help="Prompt to send to Grok")
-    parser.add_argument("--model", "-m", default="grok-2", choices=["grok-2", "grok-2-mini", "grok-beta"])
+    parser.add_argument("--model", "-m", default="grok-3", choices=["grok-3", "grok-2-mini", "grok-beta"])
     parser.add_argument("--system", "-s", help="System prompt")
     parser.add_argument("--temperature", "-t", type=float, default=0.7)
     parser.add_argument("--max-tokens", type=int, default=4096)
