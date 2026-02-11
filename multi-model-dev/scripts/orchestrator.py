@@ -571,7 +571,8 @@ class Orchestrator:
         mode: Optional[ExecutionMode] = None,
         models: Optional[List[str]] = None,
         timeout: Optional[float] = None,
-        verbose: bool = False
+        verbose: bool = False,
+        on_progress: Optional[Any] = None  # ProgressCallback type
     ) -> OrchestratorResult:
         """
         Run the orchestration pipeline.
@@ -582,16 +583,41 @@ class Orchestrator:
             models: Specific models to use (auto-routed if None)
             timeout: Per-model timeout
             verbose: Print progress
+            on_progress: Callback for real-time progress updates
             
         Returns:
             OrchestratorResult with consensus code and metadata
         """
+        # Import progress helpers
+        try:
+            from progress import (
+                emit_progress, task_received, task_analyzed, models_selected,
+                model_starting, model_completed, model_failed,
+                validation_starting, validation_completed,
+                merge_starting, merge_completed, orchestration_completed
+            )
+            has_progress = True
+        except ImportError:
+            has_progress = False
+        
+        async def emit(progress_func, *args, **kwargs):
+            """Helper to emit progress if available."""
+            if has_progress and on_progress:
+                progress = progress_func(*args, **kwargs)
+                await emit_progress(on_progress, progress)
+        
         start_time = time.time()
         timeout = timeout or self.default_timeout
+        
+        # Emit: task received
+        await emit(task_received, task)
         
         # Analyze task
         category, auto_mode = analyze_task(task)
         mode = mode or auto_mode
+        
+        # Emit: task analyzed
+        await emit(task_analyzed, category, auto_mode.value, mode.value)
         
         if verbose:
             print(f"📋 Task: {task[:60]}...")
@@ -607,14 +633,17 @@ class Orchestrator:
         
         all_models = primaries + validators
         
+        # Emit: models selected
+        await emit(models_selected, primaries, validators)
+        
         if verbose:
             print(f"🎯 Models: {', '.join(primaries)}")
             if validators:
                 print(f"✅ Validators: {', '.join(validators)}")
             print()
         
-        # Run models in parallel
-        outputs = await self._run_parallel(all_models, task, timeout, verbose)
+        # Run models in parallel (with progress)
+        outputs = await self._run_parallel(all_models, task, timeout, verbose, on_progress)
         
         # Score outputs
         for output in outputs:
@@ -623,12 +652,29 @@ class Orchestrator:
         # Run validation if we have validators
         validation = None
         if validators and len([o for o in outputs if o.success]) >= 2:
+            await emit(validation_starting, validators[0])
             validation = await self._run_validation(task, outputs, validators[0], verbose)
+            if validation:
+                await emit(
+                    validation_completed,
+                    validation.get("confidence", 0),
+                    validation.get("needs_human_review", False)
+                )
         
         # Merge outputs
+        successful_count = len([o for o in outputs if o.success])
+        await emit(merge_starting, successful_count)
+        
         consensus_code, explanation = merge_outputs(outputs, task)
         
+        # Calculate final score
+        final_score = sum(o.score for o in outputs if o.success) / max(successful_count, 1)
+        await emit(merge_completed, final_score, len(consensus_code))
+        
         execution_time = time.time() - start_time
+        
+        # Emit: complete
+        await emit(orchestration_completed, execution_time, final_score)
         
         if verbose:
             print(f"\n🎯 Consensus: {len(consensus_code)} chars")
@@ -655,22 +701,42 @@ class Orchestrator:
         models: List[str],
         task: str,
         timeout: float,
-        verbose: bool
+        verbose: bool,
+        on_progress: Optional[Any] = None
     ) -> List[ModelOutput]:
-        """Run multiple models in parallel."""
+        """Run multiple models in parallel with progress updates."""
+        
+        # Import progress helpers if available
+        try:
+            from progress import emit_progress, model_starting, model_completed, model_failed
+            has_progress = True
+        except ImportError:
+            has_progress = False
+        
+        async def emit(progress_func, *args, **kwargs):
+            if has_progress and on_progress:
+                progress = progress_func(*args, **kwargs)
+                await emit_progress(on_progress, progress)
         
         async def run_with_retry(model: str) -> ModelOutput:
             runner = self.runners.get(model)
             if not runner:
+                await emit(model_failed, model, f"Unknown model: {model}")
                 return ModelOutput(
                     model=model, code="", explanation="",
                     execution_time=0, success=False,
                     error=f"Unknown model: {model}"
                 )
             
+            # Emit: model starting
+            await emit(model_starting, model)
+            
             for attempt in range(self.max_retries + 1):
                 output = await runner.run(task, timeout)
                 if output.success:
+                    # Emit: model completed
+                    await emit(model_completed, model, score_output(output, task), 
+                              output.execution_time, len(output.code))
                     if verbose:
                         print(f"✅ {model}: {len(output.code)} chars ({output.execution_time:.1f}s)")
                     return output
@@ -680,6 +746,8 @@ class Orchestrator:
                         print(f"⚠️  {model}: retrying ({output.error})")
                     await asyncio.sleep(1)
             
+            # Emit: model failed
+            await emit(model_failed, model, output.error or "Unknown error")
             if verbose:
                 print(f"❌ {model}: {output.error}")
             return output
@@ -740,6 +808,50 @@ class Orchestrator:
     def run_sync(self, task: str, **kwargs) -> OrchestratorResult:
         """Synchronous wrapper for run()."""
         return asyncio.run(self.run(task, **kwargs))
+    
+    async def run_with_updates(
+        self,
+        task: str,
+        progress_handler: Optional[Any] = None,
+        **kwargs
+    ) -> OrchestratorResult:
+        """
+        Run with real-time progress updates.
+        
+        If no progress_handler provided, uses ConsoleProgress.
+        For Telegram/OpenClaw integration, pass an OpenClawProgress or TelegramProgress.
+        
+        Args:
+            task: Task description
+            progress_handler: ProgressHandler instance (or uses console)
+            **kwargs: Additional args passed to run()
+            
+        Returns:
+            OrchestratorResult
+            
+        Example:
+            from progress import OpenClawProgress, TelegramProgress
+            
+            # Console output (default)
+            result = await orch.run_with_updates(task)
+            
+            # Telegram integration
+            telegram = TelegramProgress(bot_token, chat_id)
+            result = await orch.run_with_updates(task, telegram)
+        """
+        if progress_handler is None:
+            try:
+                from progress import ConsoleProgress
+                progress_handler = ConsoleProgress(verbose=True)
+            except ImportError:
+                pass
+        
+        callback = progress_handler.emit if progress_handler else None
+        return await self.run(task, on_progress=callback, **kwargs)
+    
+    def run_with_updates_sync(self, task: str, **kwargs) -> OrchestratorResult:
+        """Synchronous wrapper for run_with_updates()."""
+        return asyncio.run(self.run_with_updates(task, **kwargs))
 
 
 # =============================================================================
