@@ -496,6 +496,7 @@ def score_output(output: ModelOutput, task: str) -> float:
 def merge_outputs(outputs: List[ModelOutput], task: str) -> Tuple[str, str]:
     """
     Merge multiple outputs into consensus code.
+    Uses ConsensusMerger for AST-based merging when available.
     
     Returns: (consensus_code, explanation)
     """
@@ -507,21 +508,34 @@ def merge_outputs(outputs: List[ModelOutput], task: str) -> Tuple[str, str]:
     if len(successful) == 1:
         return successful[0].code, f"Single output from {successful[0].model}"
     
-    # Score and rank outputs
+    # Try AST-based merging
+    try:
+        from merger import ConsensusMerger
+        
+        merger = ConsensusMerger()
+        outputs_dict = {o.model: o.raw_output or o.code for o in successful}
+        result = merger.merge(outputs_dict, task=task)
+        
+        if result.merged_code:
+            components_info = ", ".join(f"{k}←{v}" for k, v in result.components_used.items())
+            explanation = f"Merged (score: {result.total_score:.0f}) | {components_info}"
+            return result.merged_code, explanation
+    except ImportError:
+        pass  # Fall back to simple merging
+    except Exception as e:
+        pass  # Fall back on any error
+    
+    # Fallback: Score and rank outputs, use best
     scored = [(o, o.score) for o in successful]
     scored.sort(key=lambda x: x[1], reverse=True)
     
-    # Use highest scored as base
     best = scored[0][0]
     
-    # Build explanation
     explanation_parts = [
         f"Primary: {best.model} (score: {best.score:.0f})",
         f"Alternatives: {', '.join(o.model for o, _ in scored[1:])}"
     ]
     
-    # For now, use best output
-    # TODO: Implement AST-based merging (#3)
     return best.code, " | ".join(explanation_parts)
 
 
