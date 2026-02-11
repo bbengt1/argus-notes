@@ -356,47 +356,78 @@ CATEGORY_ROUTING = {
 def analyze_task(task: str) -> Tuple[str, ExecutionMode]:
     """
     Analyze task to determine category and execution mode.
+    Uses TaskRouter for intelligent routing when available.
     
     Returns: (category, execution_mode)
     """
-    task_lower = task.lower()
-    
-    # Detect category
-    category = "generic"
-    max_matches = 0
-    for cat, keywords in CATEGORY_KEYWORDS.items():
-        matches = sum(1 for kw in keywords if kw in task_lower)
-        if matches > max_matches:
-            max_matches = matches
-            category = cat
-    
-    # Estimate complexity based on task description
-    complexity_indicators = {
-        "simple": ["simple", "basic", "quick", "small", "function", "helper"],
-        "complex": ["complex", "full", "complete", "system", "integration", "multi"],
-        "architecture": ["architecture", "design", "scale", "enterprise", "platform"]
-    }
-    
-    mode = ExecutionMode.MEDIUM  # Default
-    for mode_name, indicators in complexity_indicators.items():
-        if any(ind in task_lower for ind in indicators):
-            if mode_name == "simple":
-                mode = ExecutionMode.SIMPLE
-            elif mode_name == "complex":
-                mode = ExecutionMode.COMPLEX
-            elif mode_name == "architecture":
-                mode = ExecutionMode.ARCHITECTURAL
-            break
-    
-    return category, mode
+    try:
+        from router import TaskRouter, Complexity
+        
+        router = TaskRouter()
+        decision = router.route(task)
+        
+        # Map complexity to execution mode
+        complexity_to_mode = {
+            Complexity.TRIVIAL: ExecutionMode.SIMPLE,
+            Complexity.SIMPLE: ExecutionMode.SIMPLE,
+            Complexity.MEDIUM: ExecutionMode.MEDIUM,
+            Complexity.COMPLEX: ExecutionMode.COMPLEX,
+            Complexity.LARGE: ExecutionMode.ARCHITECTURAL
+        }
+        
+        mode = complexity_to_mode.get(decision.complexity.level, ExecutionMode.MEDIUM)
+        return decision.category.value, mode
+        
+    except ImportError:
+        # Fallback to basic analysis
+        task_lower = task.lower()
+        
+        category = "generic"
+        max_matches = 0
+        for cat, keywords in CATEGORY_KEYWORDS.items():
+            matches = sum(1 for kw in keywords if kw in task_lower)
+            if matches > max_matches:
+                max_matches = matches
+                category = cat
+        
+        complexity_indicators = {
+            "simple": ["simple", "basic", "quick", "small", "function", "helper"],
+            "complex": ["complex", "full", "complete", "system", "integration", "multi"],
+            "architecture": ["architecture", "design", "scale", "enterprise", "platform"]
+        }
+        
+        mode = ExecutionMode.MEDIUM
+        for mode_name, indicators in complexity_indicators.items():
+            if any(ind in task_lower for ind in indicators):
+                if mode_name == "simple":
+                    mode = ExecutionMode.SIMPLE
+                elif mode_name == "complex":
+                    mode = ExecutionMode.COMPLEX
+                elif mode_name == "architecture":
+                    mode = ExecutionMode.ARCHITECTURAL
+                break
+        
+        return category, mode
 
 
-def get_routing(category: str, mode: ExecutionMode) -> Tuple[List[str], List[str]]:
+def get_routing(category: str, mode: ExecutionMode, task: str = "") -> Tuple[List[str], List[str]]:
     """
     Get model routing based on category and mode.
+    Uses TaskRouter for intelligent routing when available.
     
     Returns: (primary_models, validators)
     """
+    try:
+        from router import TaskRouter
+        
+        if task:
+            router = TaskRouter()
+            decision = router.route(task)
+            return decision.primary_models, decision.validators
+    except ImportError:
+        pass
+    
+    # Fallback routing
     primaries, default_validator = CATEGORY_ROUTING.get(category, CATEGORY_ROUTING["generic"])
     
     if mode == ExecutionMode.SIMPLE:
@@ -404,7 +435,6 @@ def get_routing(category: str, mode: ExecutionMode) -> Tuple[List[str], List[str
     elif mode == ExecutionMode.MEDIUM:
         return primaries[:2], [default_validator]
     elif mode == ExecutionMode.COMPLEX:
-        # Add second validator from remaining models
         all_models = ["claude-code", "codex", "gemini", "grok"]
         second_validator = next(
             (m for m in all_models if m not in primaries and m != default_validator),
@@ -559,7 +589,7 @@ class Orchestrator:
             primaries = models
             validators = []
         else:
-            primaries, validators = get_routing(category, mode)
+            primaries, validators = get_routing(category, mode, task)
         
         all_models = primaries + validators
         
