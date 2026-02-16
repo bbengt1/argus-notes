@@ -1,0 +1,89 @@
+# routing.yaml — Argus Dynamic Model Routing Configuration
+# Defines task categories, classification rules, and model preferences
+# Used by router.py to auto-select the best model per user query
+
+# Available models (must match OpenClaw provider config)
+models:
+  claude:
+    id: "anthropic/claude-opus-4-6"
+    alias: "opus"
+    strengths: ["technical precision", "structured output", "emotional nuance", "code", "analysis"]
+    cost_tier: "high"
+  grok3:
+    id: "xai/grok-3"
+    alias: "grok"
+    strengths: ["speed", "casual conversation", "creativity", "humor", "wild energy"]
+    cost_tier: "medium"
+  grok4:
+    id: "xai/grok-4-0709"
+    alias: "grok4"
+    strengths: ["reasoning", "multi-step analysis", "troubleshooting", "planning"]
+    cost_tier: "high"
+
+# Task categories with classification signals and model preferences
+categories:
+  creative:
+    description: "Jokes, stories, poems, unhinged ideas, brainstorming"
+    signals:
+      keywords: ["joke", "funny", "unhinged", "poem", "story", "creative", "wild", "crazy", "imagine", "what if", "hilarious", "humor", "silly", "absurd", "ridiculous", "meme"]
+      patterns: ["tell me a", "write me a", "make up", "come up with", "something funny", "something unhinged", "something wild", "something crazy"]
+    model: "grok3"
+    priority: 10
+
+  reasoning:
+    description: "Analysis, troubleshooting, multi-step problems, planning"
+    signals:
+      keywords: ["analyze", "troubleshoot", "debug", "figure out", "plan", "strategy", "compare", "evaluate", "assess", "investigate", "diagnose", "optimize", "improve", "stringing", "warping", "failing"]
+      patterns: ["pros and cons", "how should I", "what's the best way to", "help me think", "why does", "why is", "why do", "what caused", "how can I fix", "how to improve"]
+    model: "grok4"
+    priority: 9
+
+  technical:
+    description: "Code, scripts, 3D printing tuning, system admin, API work"
+    signals:
+      keywords: ["code", "script", "function", "api", "build", "implement", "deploy", "configure", "fix", "bug", "error", "python", "bash", "javascript", "docker", "git", "commit", "push", "pull request", "merge"]
+      patterns: ["write a script", "write a function", "create a", "set up", "how do I code", "write code", "build a", "debug this", "fix this"]
+    model: "claude"
+    priority: 8
+
+  emotional:
+    description: "Empathy needed — frustration, excitement, venting, personal topics"
+    signals:
+      keywords: ["frustrated", "upset", "angry", "excited", "worried", "stressed", "failed", "broke", "ruined", "annoyed", "disappointed", "thrilled", "happy", "sad", "anxious", "overwhelmed", "hate", "love"]
+      patterns: ["I'm so", "I can't believe", "this sucks", "I'm really", "I feel", "so frustrated", "so annoyed", "drives me crazy", "sick of"]
+    model: "claude"
+    priority: 7
+
+  home_automation:
+    description: "Smart home, cameras, printers, IoT devices"
+    signals:
+      keywords: ["light", "lights", "camera", "cameras", "printer", "printers", "driveway", "front door", "back door", "backyard", "doorbell", "temperature", "thermostat", "lamp", "wled", "kennel", "fishtank", "motion", "activity", "visitor", "delivery", "package"]
+      patterns: ["turn on", "turn off", "check the", "what's happening at", "who is at", "who just came", "anyone at", "is someone at", "any activity"]
+    model: "grok3"
+    priority: 6
+
+  factual:
+    description: "Quick lookups, memory recall, status checks, simple questions"
+    signals:
+      keywords: ["what is", "who is", "when is", "where is", "how many", "status", "check", "price", "weather", "stock", "capital", "drive", "car", "vehicle"]
+      patterns: ["what car", "what time", "tell me about", "remind me", "how much", "how old", "what does", "what's the", "who does"]
+    model: "grok3"
+    priority: 5
+
+  default:
+    description: "Fallback for unclassified queries"
+    signals:
+      keywords: []
+      patterns: []
+    model: "claude"
+    priority: 0
+
+# Routing rules
+rules:
+  override_prefix: "/route "
+  confidence_threshold: 0.4
+  tie_breaker: "priority"
+  cost_aware: true
+  cost_threshold: 0.1
+  sticky_categories: ["emotional", "reasoning"]
+  sticky_turns: 3

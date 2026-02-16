@@ -1,0 +1,72 @@
+{
+  "sticky_model": "grok4",
+  "sticky_category": "reasoning",
+  "sticky_turns_left": 3,
+  "history": [
+    {
+      "ts": "2026-02-16T14:34:22.799762",
+      "category": "default",
+      "model": "claude"
+    },
+    {
+      "ts": "2026-02-16T14:35:22.562281",
+      "category": "home_automation",
+      "model": "grok3"
+    },
+    {
+      "ts": "2026-02-16T14:35:51.702903",
+      "category": "home_automation",
+      "model": "grok3"
+    },
+    {
+      "ts": "2026-02-16T14:35:51.742427",
+      "category": "creative",
+      "model": "grok3"
+    },
+    {
+      "ts": "2026-02-16T14:35:51.780709",
+      "category": "factual",
+      "model": "grok3"
+    },
+    {
+      "ts": "2026-02-16T14:35:51.818534",
+      "category": "technical",
+      "model": "claude"
+    },
+    {
+      "ts": "2026-02-16T14:35:51.856337",
+      "category": "home_automation",
+      "model": "grok3"
+    },
+    {
+      "ts": "2026-02-16T14:35:51.894033",
+      "category": "default",
+      "model": "claude"
+    },
+    {
+      "ts": "2026-02-16T14:35:56.043286",
+      "category": "home_automation",
+      "model": "grok3"
+    },
+    {
+      "ts": "2026-02-16T14:36:21.794771",
+      "category": "factual",
+      "model": "grok3"
+    },
+    {
+      "ts": "2026-02-16T14:36:26.504566",
+      "category": "factual",
+      "model": "grok3"
+    },
+    {
+      "ts": "2026-02-16T14:36:42.421126",
+      "category": "reasoning",
+      "model": "grok4"
+    },
+    {
+      "ts": "2026-02-16T14:36:42.458787",
+      "category": "reasoning",
+      "model": "grok4"
+    }
+  ]
+}
