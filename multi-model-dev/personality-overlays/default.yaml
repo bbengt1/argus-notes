@@ -1,0 +1,11 @@
+# Default personality overlay — used when no model-specific overlay matches
+# No adjustments; base personality.yaml traits used as-is
+
+overlay:
+  model_pattern: "*"
+  
+  trait_adjustments: {}
+
+  system_prompt_addendum: ""
+
+  response_overrides: {}

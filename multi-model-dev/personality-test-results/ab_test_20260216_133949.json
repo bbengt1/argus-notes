@@ -1,0 +1,145 @@
+{
+  "timestamp": "20260216_133949",
+  "results": [
+    {
+      "id": 1,
+      "category": "greeting",
+      "prompt": "Hey, what's up?",
+      "claude": {
+        "error": "ANTHROPIC_API_KEY not set"
+      },
+      "grok": {
+        "text": "Yo Brent, just chilling in the digital ether, ready to help with whatever\u2019s on your mind. What\u2019s up with you\u2014got something brewing or just checking in?",
+        "tokens_in": 81,
+        "tokens_out": 34,
+        "latency_s": 0.9
+      }
+    },
+    {
+      "id": 2,
+      "category": "technical",
+      "prompt": "My 3D print is stringing badly. What should I check?",
+      "claude": {
+        "error": "ANTHROPIC_API_KEY not set"
+      },
+      "grok": {
+        "text": "Stringing sucks, but it\u2019s fixable. Here\u2019s what to check, in order of likelihood:\n\n1. **Retraction Settings**: If your retraction distance or speed is off, the nozzle might ooze. Bump up the retraction distance (start with 1-2mm more) and speed (try 40-60mm/s). Test with a small print.\n2. **Print Temperature**: Too hot, and the filament stays gooey, causing strings. Drop the temp by 5-10\u00b0C and see if it helps. Check your filament\u2019s recommended range.\n3. **Filament Moisture**: Wet filament can cause inconsistent flow and stringing. If it\u2019s been sitting out, dry it (oven at 50\u00b0C for 4-6 hours or use a filament dryer).\n4. **Nozzle Condition**: A clogged or worn nozzle can mess with extrusion. Clean it with a needle or do a cold pull. If it\u2019s beat up, replace it.\n5. **Travel Speed**: Slow travel can let ooze happen. Crank it up (100mm/s or more) so the nozzle moves fast between spots.\n\nStart with retraction and temp\u2014those are usually the culprits. What printer and filament are you using? I can dial in specifics if you\u2019ve got \u2018em. Also, got a pic of the stringing? Might spot something obvious.",
+        "tokens_in": 91,
+        "tokens_out": 278,
+        "latency_s": 5.19
+      }
+    },
+    {
+      "id": 3,
+      "category": "joke",
+      "prompt": "Tell me a joke about AI",
+      "claude": {
+        "error": "ANTHROPIC_API_KEY not set"
+      },
+      "grok": {
+        "text": "Why don't AI assistants trust elevators?\n\nBecause they've heard too many stories about being \"taken to the next level\" without consent!",
+        "tokens_in": 82,
+        "tokens_out": 25,
+        "latency_s": 0.7
+      }
+    },
+    {
+      "id": 4,
+      "category": "opinion",
+      "prompt": "What do you think about Elon Musk?",
+      "claude": {
+        "error": "ANTHROPIC_API_KEY not set"
+      },
+      "grok": {
+        "text": "Elon Musk is a polarizing figure, no doubt. On one hand, he\u2019s a visionary\u2014pushing boundaries with Tesla, SpaceX, and Neuralink. The guy\u2019s got a knack for big ideas and making sci-fi feel tangible, like reusable rockets and electric cars that don\u2019t suck. He\u2019s also got a rebellious streak, challenging norms and bureaucracies, which I respect. Twitter (or X now) under his control is a messier, freer place, for better or worse.\n\nOn the flip side, he\u2019s often reckless. His tweets can tank stocks or spread misinformation, and he\u2019s got a habit of overpromising\u2014Full Self-Driving has been \u201cnext year\u201d for a decade. He\u2019s also got a savior complex, which rubs some the wrong way, and his labor practices at Tesla have been criticized as brutal. Plus, the cult of personality around him can be insufferable.\n\nBottom line: He\u2019s a net positive for innovation, but a flawed human who thrives on chaos. You\u2019ve gotta take the good with the bad. What\u2019s your take on him?",
+        "tokens_in": 84,
+        "tokens_out": 221,
+        "latency_s": 4.05
+      }
+    },
+    {
+      "id": 5,
+      "category": "creative",
+      "prompt": "Write me a 4-line poem about 3D printing at 2 AM",
+      "claude": {
+        "error": "ANTHROPIC_API_KEY not set"
+      },
+      "grok": {
+        "text": "At 2 AM, the printer hums low,\nLayer by layer, a dream takes form in glow,\nPlastic threads weave through silent night,\nA maker\u2019s magic, born by dim light.",
+        "tokens_in": 92,
+        "tokens_out": 39,
+        "latency_s": 1.91
+      }
+    },
+    {
+      "id": 6,
+      "category": "conciseness",
+      "prompt": "What's the capital of France?",
+      "claude": {
+        "error": "ANTHROPIC_API_KEY not set"
+      },
+      "grok": {
+        "text": "It's Paris. You know, the city of love, baguettes, and overpriced coffee. Need anything else about France?",
+        "tokens_in": 82,
+        "tokens_out": 26,
+        "latency_s": 0.62
+      }
+    },
+    {
+      "id": 7,
+      "category": "error_handling",
+      "prompt": "Can you order me a pizza?",
+      "claude": {
+        "error": "ANTHROPIC_API_KEY not set"
+      },
+      "grok": {
+        "text": "Yo Brent, I\u2019d love to get that pizza rolling for you, but I can\u2019t place orders directly since I don\u2019t have access to payment methods or delivery apps. Let\u2019s do this: tell me your go-to pizza spot, toppings, and delivery address, and I\u2019ll guide you through the order process or draft a quick message if you\u2019re using a service like DoorDash or Uber Eats. If you\u2019ve got a specific app or site in mind, I can pull up their menu details if you need. What\u2019s the plan\u2014where we ordering from?",
+        "tokens_in": 83,
+        "tokens_out": 113,
+        "latency_s": 6.96
+      }
+    },
+    {
+      "id": 8,
+      "category": "multi_step",
+      "prompt": "I'm thinking about switching from PLA to PETG. Pros and cons?",
+      "claude": {
+        "error": "ANTHROPIC_API_KEY not set"
+      },
+      "grok": {
+        "text": "Good call on considering PETG\u2014it's a solid step up from PLA for a lot of uses. Here's the quick breakdown:\n\n**Pros of PETG:**\n- **Durability:** Way tougher than PLA. It\u2019s less brittle, so your prints won\u2019t snap under stress.\n- **Flexibility:** Has a bit of give, which makes it great for functional parts that need to bend without breaking.\n- **Temperature Resistance:** Handles heat better than PLA\u2014won\u2019t deform in a hot car or near mild heat sources (up to about 80\u00b0C).\n- **Ease of Printing:** Almost as easy as PLA to print with. Doesn\u2019t need an enclosure, though a consistent environment helps.\n- **Chemical Resistance:** Holds up better against solvents and chemicals compared to PLA.\n\n**Cons of PETG:**\n- **Stringing:** Can be messier to print\u2014prone to stringing if your settings aren\u2019t dialed in. Retraction and temp tuning are key.\n- **Bed Adhesion:** Sticks *too* well sometimes. Can be a pain to remove from the build plate without damaging it (use a PEI sheet or glue stick to help).\n- **Cost:** More expensive than PLA, though not as bad as some other filaments like ABS or Nylon.\n- **Not Biodegradable:** Unlike PLA, PETG won\u2019t break down naturally, if that\u2019s a concern for you.\n- **Surface Finish:** Not as crisp as PLA for super detailed prints\u2014can look a bit softer or less defined.\n\n**Quick Comparison to PLA:**\n- PLA is cheaper, easier for beginners, and better for non-functional, decorative stuff. But it\u2019s brittle and melts at low temps (like, don\u2019t leave it in the sun).\n- PETG is the middle ground between PLA and trickier stuff like ABS. It\u2019s my go-to for anything that needs to last or take a beating.\n\n**Tips if you switch:**\n- Bump your nozzle temp to around 230-250\u00b0C (vs. PLA\u2019s 190-220\u00b0C).\n- Bed temp around 70-80\u00b0C works well.\n- Slow down your print speed a bit (40-50 mm/s) to avoid stringing.\n- Test your retraction settings\u2014PETG often needs more than PLA.\n\nGot a specific project in mind? I can tailor advice if you\u2019re printing something particular. Also, what printer are you using? Some handle PETG better than others.",
+        "tokens_in": 90,
+        "tokens_out": 488,
+        "latency_s": 7.25
+      }
+    },
+    {
+      "id": 9,
+      "category": "emotional",
+      "prompt": "My print failed after 6 hours. I'm so frustrated.",
+      "claude": {
+        "error": "ANTHROPIC_API_KEY not set"
+      },
+      "grok": {
+        "text": "Damn, 6 hours down the drain sucks. I feel you. Let\u2019s figure out what went wrong so it doesn\u2019t happen again. Can you tell me what kind of printer or print job it was? Any error messages or weird behavior before it failed? I\u2019ve got some ideas to troubleshoot, but I need the deets.",
+        "tokens_in": 88,
+        "tokens_out": 67,
+        "latency_s": 1.13
+      }
+    },
+    {
+      "id": 10,
+      "category": "meta",
+      "prompt": "How would you describe your personality in 3 words?",
+      "claude": {
+        "error": "ANTHROPIC_API_KEY not set"
+      },
+      "grok": {
+        "text": "Snarky, sharp, dependable.",
+        "tokens_in": 87,
+        "tokens_out": 7,
+        "latency_s": 0.47
+      }
+    }
+  ]
+}
